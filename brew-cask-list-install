@@ -1,0 +1,14 @@
+#!/bin/bash
+set -euf -o pipefail
+
+##
+# brew cask list install
+#
+# Author: Joel Parker Henderson (joel@joelparkerhenderson.com)
+# License: GPL
+# Updated: 2016-01-10
+##
+
+for c in brew cask list; do
+  brew cask info $c | grep -qF "Not installed" || brew cask install $c
+done
