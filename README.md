@@ -6,6 +6,7 @@
 * `brew-group`: set the brew group name and related path permissions.
 * `brew-install-optimize`: install as needed.
 * `brew-formula-description`: fetch the brew formula description.
+* `brew-fix`: commands that help brew fix itself.
 
 ### brew cask
 
