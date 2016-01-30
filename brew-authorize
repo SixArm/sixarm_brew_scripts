@@ -1,0 +1,76 @@
+#!/bin/sh
+set -euf
+help(){
+cat << EOF
+
+brew-authorize: set the brew user name, group name, and permissions
+
+Syntax:
+
+    brew-authorize [user [group [path]]]
+
+Options:
+
+  * user: default is $USER.
+  * group: default is "admin".
+  * path: default is `brew --prefix` which is typically "/usr/local"
+
+Example with defaults that do the right things:
+
+    brew-authorize
+
+Example with all custom options:
+
+    brew-authorize alice staff /foo/bar
+
+## Details
+
+Homebrew expects to manage all of the `/usr/local` directory.
+If any other tool or script changes anything within `/usr/local`,
+then Homebrew may be affected, and may prompt you to fix things.
+
+For single-user systems, brew docs recommend commands such as:
+
+    chown $USER /usr/local
+    chmod 755 /usr/local
+
+For multi-user systems like ours, we modify the group, not the user:
+
+    chgrp admin /usr/local
+    chmod 775 /usr/local
+
+## User details
+
+We use the "$USER" environment variable, which is the current user.
+
+This is typically what a normal single-user system would want to use.
+
+## Group details
+
+We use the "admin" group, which is a default administrator group on OS X.
+
+If you have a multi-user system and you want any staff to be able to use
+brew, then you'll likely want to use the typical "staff" group on OS X.
+
+If you want better security, or want to control exactly which users are
+able to use brew, then you may want to create a "brew" group with users.
+
+Version: 1.0.0
+Created: 2016-01-14
+Updated: 2016-01-15
+License: GPL
+Contact: Joel Parker Henderson (joel@joelparkerhenderson.com)
+EOF
+}
+out () { printf %s\\n "$*" ; }
+
+user=${1:-"$USER"}
+group=${2:-"admin"}
+path=${3:-$(brew --prefix)}
+out "brew-authorize user:$user group:$group path:$path"
+
+sudo touch "$path"
+sudo chown -R "$user" "$path"
+sudo chgrp -R "$group" "$path"
+sudo find "$path" -type f -exec chmod g+rw {} \;
+sudo find "$path" -type d -exec chmod g+rwx {} \;
