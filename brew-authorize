@@ -1,5 +1,18 @@
 #!/bin/sh
 set -euf
+
+## Program Tracking ##
+
+program_command="brew-authorize"
+program_version="1.5.0"
+program_created="2016-01-14"
+program_updated="2016-02-07"
+program_license="GPL"
+program_contact="Joel Parker Henderson (joel@joelparkerhenderson.com)"
+program_variant="$program_command version $program_version updated $program_updated"
+
+## Help Function ##
+
 help(){
 cat << EOF
 
@@ -7,25 +20,37 @@ brew-authorize: set the brew user name, group name, and permissions
 
 Syntax:
 
-    brew-authorize [user [group [path]]]
+    brew-authorize [-u user] [-g group] [path ...]
 
 Options:
 
-  * user: default is $USER.
-  * group: default is "admin".
-  * path: default is `brew --prefix` which is typically "/usr/local"
+  * -u --user: set the user name; default is "brew".
+  * -g --group: set the group name; default is "brew".
 
-Example with defaults that do the right things:
+Paths:
+
+  * `brew --prefix` typically `/usr/local`
+  * `brew --repository` + ".git", typically `/usr/local/.git`
+  * `brew --cellar` typically `/usr/local/Cellar`
+  * `brew --cache` typically `/Library/Caches/Homebrew`
+  * Brew cask, typically `/opt/homebrew-cask/Caskroom`
+
+Example with defaults that do the right thing:
 
     brew-authorize
 
-Example with all custom options:
+Example with custom user and custom group:
 
-    brew-authorize alice staff /foo/bar
+    brew-authorize --user alice --group admin
+
+Example with custom paths:
+
+    brew-authorize /my/apps /my/cache /my/cellar /my/caskroom
 
 ## Details
 
 Homebrew expects to manage all of the `/usr/local` directory.
+
 If any other tool or script changes anything within `/usr/local`,
 then Homebrew may be affected, and may prompt you to fix things.
 
@@ -39,6 +64,25 @@ For multi-user systems like ours, we modify the group, not the user:
     chgrp admin /usr/local
     chmod 775 /usr/local
 
+## OS X users and groups
+
+To list users and groups
+
+    dscl . list /Users
+    dscl . list /Groups
+
+To add a user to a group:
+
+    dseditgroup -o edit -a vivek -t user developers
+
+To drop a user from a group:
+
+    dseditgroup -o edit -d vivek -t user developers
+
+To check membership:
+
+    dseditgroup -o checkmember -m alice admin
+
 ## User details
 
 We use the "$USER" environment variable, which is the current user.
@@ -47,7 +91,7 @@ This is typically what a normal single-user system would want to use.
 
 ## Group details
 
-We use the "admin" group, which is a default administrator group on OS X.
+We use the "brew" group, which is a default administrator group on OS X.
 
 If you have a multi-user system and you want any staff to be able to use
 brew, then you'll likely want to use the typical "staff" group on OS X.
@@ -55,22 +99,150 @@ brew, then you'll likely want to use the typical "staff" group on OS X.
 If you want better security, or want to control exactly which users are
 able to use brew, then you may want to create a "brew" group with users.
 
-Version: 1.0.0
-Created: 2016-01-14
-Updated: 2016-01-15
-License: GPL
-Contact: Joel Parker Henderson (joel@joelparkerhenderson.com)
+## OS X OpenDirectory
+
+OS X 10.6+ uses OpenDirectory to manage user accounts.
+
+The backend files related to users for OpenDirectory are here:
+
+    /var/db/dslocal/nodes/Default/users
+
+Run `ls *` in this directory to show local users registered on the system.
+
+Run `plutil -p <file>.plist` to read properties for a specific user account.
+
+Thanks to http://apple.stackexchange.com/questions/29874/how-can-i-list-all-user-accounts-in-the-terminal
+
+Command: $program_command
+Version: $program_version
+Created: $program_created
+Updated: $program_updated
+License: $program_licence
+Contact: $program_contact
 EOF
 }
+
+## Essential Functions ##
+
 out () { printf %s\\n "$*" ; }
+err () { >&2 printf %s\\n "$*" ; }
+die () { >&2 printf %s\\n "$*" ; exit 1 ; }
+die_opt_unk() { die "Option $1 is unknown" ; }
+die_opt_arg() { die "Option $1 needs an argument" ; }
 
-user=${1:-"$USER"}
-group=${2:-"admin"}
-path=${3:-$(brew --prefix)}
-out "brew-authorize user:$user group:$group path:$path"
 
-sudo touch "$path"
-sudo chown -R "$user" "$path"
-sudo chgrp -R "$group" "$path"
-sudo find "$path" -type f -exec chmod g+rw {} \;
-sudo find "$path" -type d -exec chmod g+rwx {} \;
+## Implementations ##
+
+chown_chgrp_chmod_path(){
+    user="$1"
+    group="$2"
+    mod="$3"
+    path="$4"
+    sudo chown -R "user" "$path"
+    sudo chgrp -R "$group" "$path"
+    sudo find "$path" -type f -exec chmod "g+rw" {} \;
+    sudo find "$path" -type d -exec chmod "g+rwx" {} \;
+}
+
+## Defaults
+
+user="brew"
+group="brew"
+
+dseditgroup -o edit -a brew -t user brew
+
+
+vet_user_name(){
+    id -u "$1" >/dev/null 2>&1
+}
+
+##
+#
+# Directory Server Command Line
+#
+##
+
+# Does a user name exist?
+#
+# Example:
+#
+#     dscl_user_name_exists alice
+#     => 0 a.k.a. true
+#
+dscl_user_name_exists(){
+    dscl . -read "/Users/$1" > /dev/null 2>&1
+    echo $?
+}
+
+# Does a group name exist?
+#
+# Example:
+#
+#     dscl_group_name_exists staff
+#     => 0 a.k.a. true
+#
+dscl_group_name_exists(){
+    dscl . -read "/Users/$1" > /dev/null 2>&1
+    echo $?
+}
+
+# Get the maximum user id number.
+#
+# Example:
+#
+#    dscl_user_id_max
+#    => 503
+#
+dscl_user_id_max(){
+    dscl . -list /Users UniqueID | awk '{print $2}' | sort -n | tail -1
+}
+
+## Options
+
+while [ $# -gt 0 ]; do
+    case $1 in
+        -h|--help|-\?)
+            show_help
+            ;;
+        -V|--version)
+            show_variant
+            ;;
+        -v|--verbose)
+            verbose=$((verbose + 1))
+            ;;
+        -u|--user)
+            [ $# -le 1 ] && die_opt_arg $1
+            user="$2"
+            shift
+            ;;
+        --user=?*)
+            user=${1#*=}
+            ;;
+        --user=)
+            die_opt_arg $1
+            ;;
+        -g|--group)
+            [ $# -le 1 ] && die_opt_arg $1
+            group="$2"
+            shift
+            ;;
+        --group=?*)
+            group=${1#*=}
+            ;;
+        --group=)
+            die_opt_arg $1
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -?*)
+            die_opt_unk $1
+            ;;
+        *)
+            break
+    esac
+    shift
+done
+
+out "user:$user group:$group"
