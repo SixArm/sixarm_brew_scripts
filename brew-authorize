@@ -4,9 +4,9 @@ set -euf
 ## Program Tracking ##
 
 program_command="brew-authorize"
-program_version="1.5.0"
+program_version="1.5.1"
 program_created="2016-01-14"
-program_updated="2016-02-07"
+program_updated="2016-03-13"
 program_license="GPL"
 program_contact="Joel Parker Henderson (joel@joelparkerhenderson.com)"
 program_variant="$program_command version $program_version updated $program_updated"
@@ -14,7 +14,7 @@ program_variant="$program_command version $program_version updated $program_upda
 ## Help Function ##
 
 help(){
-cat << EOF
+cat << END
 
 brew-authorize: set the brew user name, group name, and permissions
 
@@ -119,7 +119,7 @@ Created: $program_created
 Updated: $program_updated
 License: $program_licence
 Contact: $program_contact
-EOF
+END
 }
 
 ## Essential Functions ##
@@ -129,7 +129,6 @@ err () { >&2 printf %s\\n "$*" ; }
 die () { >&2 printf %s\\n "$*" ; exit 1 ; }
 die_opt_unk() { die "Option $1 is unknown" ; }
 die_opt_arg() { die "Option $1 needs an argument" ; }
-
 
 ## Implementations ##
 
@@ -194,7 +193,7 @@ dscl_group_name_exists(){
 #    => 503
 #
 dscl_user_id_max(){
-    dscl . -list /Users UniqueID | awk '{print $2}' | sort -n | tail -1
+    dscl . -list /Users UniqueID | awk '{if (max==""||$2>max) max=$2} END {print max}'
 }
 
 ## Options
