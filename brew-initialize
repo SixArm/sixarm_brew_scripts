@@ -1,0 +1,184 @@
+#!/bin/bash
+set -euf
+
+## Program Tracking ##
+
+program_command="brew-initialize"
+program_version="2.0.0"
+program_created="2016-01-14"
+program_updated="2016-03-13"
+program_license="GPL"
+program_contact="Joel Parker Henderson (joel@joelparkerhenderson.com)"
+program_variant="$program_command version $program_version updated $program_updated"
+
+## Help Function ##
+
+help(){
+cat <<EOF
+
+brew-initialize
+Create the OSX Homebrew user, group, and DSCL settings.
+
+Syntax:
+
+    brew-initialize
+
+Example:
+
+    brew-initialize
+    => create the user "_brew" and add it to the admin group
+
+Command: $program_command
+Version: $program_version
+Created: $program_created
+Updated: $program_updated
+License: $program_license
+Contact: $program_contact
+EOF
+}
+
+## Essential Functions ##
+
+out () { printf %s\\n "$*" ; }
+err () { >&2 printf %s\\n "$*" ; }
+die () { >&2 printf %s\\n "$*" ; exit 1 ; }
+log () { printf '%s %s %s\n' "$( now )" $$ "$*" ; }
+now () { date -u "+%Y-%m-%dT%H:%M:%S.%NZ" ; }
+zid () { hexdump -n 16 -v -e '16/1 "%02x" "\n"' /dev/random ; }
+
+##
+#
+# Directory Service Command Line Functions
+#
+##
+
+# Does a user name exist?
+#
+# Example:
+#
+#     dscl_user_name_exists alice
+#     => 0 a.k.a. true
+#
+dscl_user_name_exists(){
+    dscl . -read "/Users/$1" > /dev/null 2>&1
+    echo $?
+}
+
+# Convert an existing user name to its unique id.
+#
+# Example:
+#
+#     dscl_user_name_to_id alice
+#     => 503
+#
+dscl_user_name_to_id() {
+  dscl . -read "/Users/$1" | awk '($1 == "UniqueID:") { print $2 }'
+}
+
+# Get the maximum user id number.
+#
+# Example:
+#
+#    dscl_user_id_max
+#    => 503
+#
+dscl_user_id_max(){
+    dscl . -list /Users UniqueID | awk '{if (max==""||$2>max) max=$2} END {print max}'
+}
+
+# Does a group name exist?
+#
+# Example:
+#
+#     dscl_group_name_exists staff
+#     => 0 a.k.a. true
+#
+dscl_group_name_exists(){
+    dscl . -read "/Users/$1" > /dev/null 2>&1
+    echo $?
+}
+
+# Convert an existing user name to its primary group id number.
+#
+# Example:
+#
+#    dscl_group_name_to_id admin
+#    => 80
+#
+dscl_group_name_to_id() {
+  dscl . -read "/Groups/$1" | awk '($1 == "PrimaryGroupID:") { print $2 }'
+}
+
+##
+#
+# Homebrew Configuration
+#
+##
+
+# Our convention for a user id is to use the next available number.
+user_id=$(($(dscl_user_id_max) + 1))
+
+# Our convention for a system account uses a leading underscore.
+user_name="_brew"
+
+# Our convention for a real name is to use the software's name.
+user_real_name="Brew"
+
+# Our convention for a password uses random letters and numbers.
+user_password=$(hexdump -n 8 -v -e '16/1 "%02x" "\n"' /dev/random)
+
+# Our convention gives admin access by using the built-in OSX account.
+group_id=$(dscl_group_name_to_id admin)
+
+##
+#
+# Options
+#
+##
+
+while [ $# -gt 0 ]; do
+    case $1 in
+        -h|--help|-\?)
+            help; exit 0
+            ;;
+        -V|--version)
+            out "$program_variant"; exit 0
+            ;;
+        -v|--verbose)
+            verbose=$((verbose + 1))
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -?*)
+            die_opt_unk "$1"
+            ;;
+        *)
+            break
+    esac
+    shift
+done
+
+##
+#
+# Main
+#
+##
+
+if dscl_user_name_exists $user_name; then
+  out "User name $user_name exists, so this script is skipping the user items."
+else
+  out "Create user name $user_name"
+  dscl . -create "/Users/$user_name"
+  dscl . -create "/Users/$user_name" UniqueID "$user_id"
+  dscl . -create "/Users/$user_name" UserShell /bin/bash
+  dscl . -create "/Users/$user_name" RealName "$user_real_name"
+  dscl . -create "/Users/$user_name" PrimaryGroupID "$group_id"
+  dscl . -create "/Users/$user_name" NFSHomeDirectory "/Users/$user_name"
+  dscl . -passwd "/Users/$user_name" "$user_password"
+  mkdir -p "/Users/$user_name"
+  chown $user_name "/Users/$user_name"
+fi
+
+exit 0
