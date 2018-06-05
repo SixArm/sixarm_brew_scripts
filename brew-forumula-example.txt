@@ -1,0 +1,15 @@
+class Example < Formula
+  desc "Description here"
+  homepage "http://github.com/sixarm/example"
+  url "https://github.com/SixArm/example/archive/1.0.0.tar.gz"
+  sha256 "ba66569a45fb52fa61526ebdd608b82c735b3cf815303d15b01054c032b8812d"
+
+  def install
+    bin.install "example"
+  end
+
+  test do
+    assert_equal "foo", shell_output("#{bin}/example union a b").strip
+  end
+
+end
